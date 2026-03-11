@@ -33,14 +33,89 @@ set(USE_GUROBI OFF CACHE BOOL "Use GUROBI" FORCE)
 # Build dependencies from source for consistent versions
 set(BUILD_DEPS ON CACHE BOOL "Build dependencies" FORCE)
 
+# Build OR-Tools and all dependencies as static libraries so everything
+# gets linked into the single libtsp_ffi.so — avoids needing to ship
+# libortools.so, libbz2.so, etc. separately (Android can't find them).
+set(BUILD_SHARED_LIBS OFF CACHE BOOL "Build static libraries" FORCE)
+
+# bzip2 uses its own flags instead of BUILD_SHARED_LIBS
+set(ENABLE_SHARED_LIB OFF CACHE BOOL "No shared bzip2" FORCE)
+set(ENABLE_STATIC_LIB ON  CACHE BOOL "Static bzip2" FORCE)
+set(ENABLE_LIB_ONLY   ON  CACHE BOOL "Lib only bzip2" FORCE)
+set(ENABLE_APP         OFF CACHE BOOL "No bzip2 apps" FORCE)
+set(ENABLE_EXAMPLES    OFF CACHE BOOL "No bzip2 examples" FORCE)
+
+# protobuf: force static
+set(protobuf_BUILD_SHARED_LIBS OFF CACHE BOOL "Static protobuf" FORCE)
+
+set(ORTOOLS_SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/third_party/or-tools")
+if(NOT EXISTS "${ORTOOLS_SOURCE_DIR}/CMakeLists.txt")
+  message(FATAL_ERROR
+    "Vendored OR-Tools source not found at ${ORTOOLS_SOURCE_DIR}. "
+    "Populate src/third_party/or-tools with a pinned source snapshot."
+  )
+endif()
+
+# When cross-compiling (e.g. for Android), protoc must run on the host.
+# OR-Tools' built-in host_tools mechanism uses add_custom_command which
+# Ninja cannot track as a file-level dependency.  Work around this by
+# building host protoc at *configure* time and passing it in.
+if(CMAKE_CROSSCOMPILING AND NOT OR_TOOLS_PROTOC_EXECUTABLE)
+  set(_HOST_PROTOC_DIR "${CMAKE_CURRENT_BINARY_DIR}/_host_protoc")
+  set(_HOST_PROTOC     "${_HOST_PROTOC_DIR}/bin/protoc")
+
+  if(NOT EXISTS "${_HOST_PROTOC}")
+    message(STATUS "Building host protoc for cross-compilation...")
+
+    file(RELATIVE_PATH _PATCHES_REL
+      "${_HOST_PROTOC_DIR}"
+      "${ORTOOLS_SOURCE_DIR}/patches")
+
+    set(PATCHES_PATH "${_PATCHES_REL}")
+    configure_file(
+      "${ORTOOLS_SOURCE_DIR}/cmake/host.CMakeLists.txt"
+      "${_HOST_PROTOC_DIR}/CMakeLists.txt"
+      @ONLY)
+
+    execute_process(
+      COMMAND ${CMAKE_COMMAND}
+        -S . -B build
+        -DCMAKE_BUILD_TYPE=Release
+        "-DCMAKE_RUNTIME_OUTPUT_DIRECTORY:PATH=${_HOST_PROTOC_DIR}/bin"
+      WORKING_DIRECTORY "${_HOST_PROTOC_DIR}"
+      RESULT_VARIABLE _host_cfg_result)
+    if(_host_cfg_result)
+      message(FATAL_ERROR "Host protoc configure step failed (${_host_cfg_result})")
+    endif()
+
+    execute_process(
+      COMMAND ${CMAKE_COMMAND} --build build --config Release
+      WORKING_DIRECTORY "${_HOST_PROTOC_DIR}"
+      RESULT_VARIABLE _host_build_result)
+    if(_host_build_result)
+      message(FATAL_ERROR "Host protoc build step failed (${_host_build_result})")
+    endif()
+  endif()
+
+  set(OR_TOOLS_PROTOC_EXECUTABLE "${_HOST_PROTOC}" CACHE STRING
+    "Path to host protoc for cross-compilation" FORCE)
+  message(STATUS "Using host protoc: ${OR_TOOLS_PROTOC_EXECUTABLE}")
+endif()
+
 # Add OR-Tools as a subdirectory
-add_subdirectory(or-tools EXCLUDE_FROM_ALL)
+add_subdirectory(${ORTOOLS_SOURCE_DIR} ${CMAKE_CURRENT_BINARY_DIR}/or-tools EXCLUDE_FROM_ALL)
+
+# Gurobi stubs must be linked into ortools itself (not just tsp_ffi),
+# because gurobi_interface.cc and gurobi_proto_solver.cc reference these
+# symbols when building libortools.so.
+target_sources(ortools PRIVATE
+  ${CMAKE_CURRENT_SOURCE_DIR}/gurobi_stubs.cc
+)
 
 # Now build our FFI wrapper library
 add_library(tsp_ffi SHARED
   tsp_ffi.cc
   tsp_ffi.h
-  gurobi_stubs.cc
 )
 
 set_target_properties(tsp_ffi PROPERTIES

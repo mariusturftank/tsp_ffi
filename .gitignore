@@ -31,3 +31,8 @@ migrate_working_dir/
 .flutter-plugins-dependencies
 /build/
 /coverage/
+/android/.cxx/
+/examples/flutter/build/
+/.metadata
+/src/build/
+/src/build-android-*/

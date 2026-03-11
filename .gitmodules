@@ -1,0 +1,3 @@
+[submodule "src/third_party/or-tools"]
+	path = src/third_party/or-tools
+	url = https://github.com/google/or-tools.git

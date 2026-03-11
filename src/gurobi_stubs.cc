@@ -1,8 +1,15 @@
 // Gurobi stub implementations for OR-Tools when Gurobi is not available
 // This file provides dummy implementations for all Gurobi function pointers
-// that OR-Tools expects, allowing the library to link without Gurobi installed.
+// and helper functions that OR-Tools expects, allowing the library to link
+// without Gurobi installed.
 
 #include <functional>
+#include <string>
+#include <vector>
+
+#include "absl/status/status.h"
+#include "absl/status/statusor.h"
+#include "absl/strings/string_view.h"
 
 // Forward declarations from gurobi_c.h
 extern "C" {
@@ -108,4 +115,21 @@ std::function<void(GRBenv *env)> GRBfreeenv = nullptr;
 std::function<const char *(GRBenv *env)> GRBgeterrormsg = nullptr;
 std::function<void(int *majorP, int *minorP, int *technicalP)> GRBversion = nullptr;
 std::function<char *(void)> GRBplatform = nullptr;
+
+absl::StatusOr<GRBenv*> GetGurobiEnv() {
+  return absl::NotFoundError("Gurobi is not available");
+}
+
+bool GurobiIsCorrectlyInstalled() { return false; }
+
+absl::Status LoadGurobiDynamicLibrary(
+    std::vector<absl::string_view> /*potential_paths*/) {
+  return absl::NotFoundError("Gurobi is not available");
+}
+
+std::string GurobiParamInfoForLogging(GRBenv* /*grb*/,
+                                      bool /*one_liner_output*/) {
+  return "";
+}
+
 } // namespace operations_research
