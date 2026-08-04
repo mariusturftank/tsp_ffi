@@ -8,6 +8,13 @@
 extern "C" {
 #endif
 
+// The library is compiled with -fvisibility=hidden so unused OR-Tools code
+// can be dropped by --gc-sections. Force our own extern "C" entry points
+// back to default visibility so Dart FFI can resolve them.
+#if !defined(_WIN32)
+  #pragma GCC visibility push(default)
+#endif
+
 // Opaque handles for C++ objects
 typedef void* RoutingIndexManagerHandle;
 typedef void* RoutingModelHandle;
@@ -159,6 +166,10 @@ enum {
     LOCAL_SEARCH_METAHEURISTIC_TABU_SEARCH = 4,
     LOCAL_SEARCH_METAHEURISTIC_AUTOMATIC = 6
 };
+
+#if !defined(_WIN32)
+  #pragma GCC visibility pop
+#endif
 
 #ifdef __cplusplus
 }

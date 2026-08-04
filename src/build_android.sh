@@ -64,6 +64,17 @@ for ABI in "${ABIS[@]}"; do
   "$CMAKE_BIN" --build "$BUILD_DIR" --target tsp_ffi --config "$BUILD_TYPE" \
     -j16
 
+  # Strip DWARF debug info before shipping to jniLibs. The AGP strips native
+  # libs on the way into the APK regardless, but keeping a fat unstripped
+  # .so in the repo bloats git and CI artifacts (~294 MB unstripped vs
+  # ~16 MB stripped for arm64-v8a).
+  NDK_STRIP="$NDK_ROOT/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip"
+  if [ -x "$NDK_STRIP" ]; then
+    "$NDK_STRIP" --strip-all "$BUILD_DIR/libtsp_ffi.so"
+  else
+    echo "WARN: llvm-strip not found at $NDK_STRIP — shipping unstripped .so"
+  fi
+
   # Install to jniLibs
   DEST="$OUTPUT_BASE/$ABI"
   mkdir -p "$DEST"

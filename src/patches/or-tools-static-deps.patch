@@ -1,0 +1,20 @@
+--- a/cmake/dependencies/CMakeLists.txt
++++ b/cmake/dependencies/CMakeLists.txt
+@@ -49,7 +49,7 @@
+ include(FetchContent)
+ set(FETCHCONTENT_QUIET OFF)
+ set(FETCHCONTENT_UPDATES_DISCONNECTED ON)
+-set(BUILD_SHARED_LIBS ON)
++set(BUILD_SHARED_LIBS OFF)
+ set(CMAKE_POSITION_INDEPENDENT_CODE ON)
+ set(BUILD_TESTING OFF)
+ set(CMAKE_Fortran_COMPILER OFF)
+@@ -129,7 +129,7 @@
+   message(CHECK_START "Fetching Protobuf")
+   list(APPEND CMAKE_MESSAGE_INDENT "  ")
+   set(protobuf_BUILD_TESTS OFF)
+-  set(protobuf_BUILD_SHARED_LIBS ON)
++  set(protobuf_BUILD_SHARED_LIBS OFF)
+   set(protobuf_BUILD_EXPORT OFF)
+   set(protobuf_MSVC_STATIC_RUNTIME OFF)
+   #set(protobuf_BUILD_LIBUPB ON)

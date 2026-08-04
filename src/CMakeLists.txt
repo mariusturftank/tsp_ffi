@@ -10,6 +10,26 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 
+# Hide OR-Tools symbols by default so `-Wl,--gc-sections` can drop code paths
+# that aren't reachable from tsp_ffi's exported extern "C" entry points.
+# tsp_ffi.h opts back in with __attribute__((visibility("default"))).
+set(CMAKE_CXX_VISIBILITY_PRESET hidden)
+set(CMAKE_C_VISIBILITY_PRESET hidden)
+set(CMAKE_VISIBILITY_INLINES_HIDDEN ON)
+
+# Thin LTO lets the linker see across TU boundaries and drop unreachable
+# OR-Tools code. Enable for Release only; Debug builds stay fast to link.
+if(CMAKE_BUILD_TYPE STREQUAL "Release" OR CMAKE_BUILD_TYPE STREQUAL "RelWithDebInfo")
+  include(CheckIPOSupported)
+  check_ipo_supported(RESULT _ipo_supported OUTPUT _ipo_error)
+  if(_ipo_supported)
+    set(CMAKE_INTERPROCEDURAL_OPTIMIZATION ON)
+    message(STATUS "Thin LTO enabled")
+  else()
+    message(STATUS "LTO not supported: ${_ipo_error}")
+  endif()
+endif()
+
 # Configure OR-Tools build options - we only need the C++ library, no samples/examples
 set(BUILD_CXX ON CACHE BOOL "Build C++ library" FORCE)
 set(BUILD_SAMPLES OFF CACHE BOOL "Build samples" FORCE)
@@ -142,4 +162,15 @@ target_compile_definitions(tsp_ffi PUBLIC
 if (ANDROID)
   # Support Android 15 16k page size
   target_link_options(tsp_ffi PRIVATE "-Wl,-z,max-page-size=16384")
+endif()
+
+# Prevent symbols from statically-linked OR-Tools / abseil / protobuf archives
+# from being re-exported in libtsp_ffi.so's dynamic symbol table. Combined
+# with hidden visibility and --gc-sections, this lets the linker drop code
+# paths that aren't reachable from tsp_ffi's own extern "C" entry points.
+if(NOT MSVC)
+  target_link_options(tsp_ffi PRIVATE
+    "LINKER:--exclude-libs,ALL"
+    "LINKER:--gc-sections"
+  )
 endif()
