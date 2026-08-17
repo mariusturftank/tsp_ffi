@@ -2,6 +2,50 @@
 
 A new Flutter FFI plugin project.
 
+## Platform support
+
+**Android, `arm64-v8a` only.** The native library statically links OR-Tools,
+so every additional ABI is a full OR-Tools build (about an hour) and another
+~11 MB binary. `armeabi-v7a` and `x86_64` are deliberately not shipped, which
+means **x86_64 emulators cannot run this plugin** — use an arm64 device or an
+arm64 system image.
+
+Apps consuming this plugin should declare the same filter, so an unsupported
+ABI fails at build time rather than at `DynamicLibrary.open`:
+
+```kotlin
+// android/app/build.gradle.kts
+defaultConfig {
+    ndk {
+        abiFilters += listOf("arm64-v8a")
+    }
+}
+```
+
+## Building the native library
+
+The `.so` is prebuilt and committed under `android/src/main/jniLibs/`, because
+building OR-Tools from source on every consumer build is not practical.
+Regenerate it after changing anything under `src/`:
+
+```bash
+cd src && ./build_android.sh arm64-v8a      # BUILD_JOBS=8 by default
+```
+
+The build applies `src/patches/or-tools-static-deps.patch`, which forces the
+vendored OR-Tools to build abseil and protobuf statically. That patch's context
+drifts whenever OR-Tools is bumped; the script fails loudly with regeneration
+instructions if it no longer applies.
+
+## Running tests
+
+The functional tests call the real native library, so the loader needs to find
+the Linux host build:
+
+```bash
+LD_LIBRARY_PATH=src/build:src/build/lib fvm flutter test
+```
+
 ## Getting Started
 
 This project is a starting point for a Flutter
@@ -14,6 +58,10 @@ This template uses the following structure:
 
 * `src`: Contains the native source code, and a CmakeFile.txt file for building
   that source code into a dynamic library.
+
+* `src/third_party/or-tools`: Contains a pinned vendored copy of OR-Tools used by
+  the native build. This directory should contain source files only, not a
+  nested `.git` directory.
 
 * `lib`: Contains the Dart code that defines the API of the plugin, and which
   calls into the native code using `dart:ffi`.
@@ -74,6 +122,12 @@ To use the native code, bindings in Dart are needed.
 To avoid writing these by hand, they are generated from the header file
 (`src/tsp_ffi.h`) by `package:ffigen`.
 Regenerate the bindings by running `dart run ffigen --config ffigen.yaml`.
+
+## Vendored dependencies
+
+OR-Tools is kept as a vendored source snapshot under `src/third_party/or-tools`
+instead of as a nested Git repository. This keeps the parent repository clean
+while still allowing CMake to build OR-Tools with `add_subdirectory(...)`.
 
 ## Invoking native code
 

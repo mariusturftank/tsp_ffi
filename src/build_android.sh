@@ -36,14 +36,35 @@ fi
 
 OUTPUT_BASE="$SCRIPT_DIR/../android/src/main/jniLibs"
 
-# Apply static-linking patch to or-tools (idempotent via --forward)
+# Apply the static-linking patch to or-tools. This is load-bearing: or-tools'
+# cmake/dependencies/CMakeLists.txt does a plain `set(BUILD_SHARED_LIBS ON)`,
+# which shadows the cache variable we FORCE in CMakeLists.txt and builds abseil
+# and protobuf as shared libraries. Combined with the hidden-visibility preset,
+# that fails the link with undefined absl::flags_internal symbols.
+#
+# A "patch didn't apply" here must be fatal, not a warning — the build gets
+# much further before failing in a way that looks unrelated.
 ORTOOLS_DIR="$SCRIPT_DIR/third_party/or-tools"
 PATCH_FILE="$SCRIPT_DIR/patches/or-tools-static-deps.patch"
 if [ -f "$PATCH_FILE" ] && [ -d "$ORTOOLS_DIR" ]; then
   echo "Applying static-linking patch to or-tools..."
-  git -C "$ORTOOLS_DIR" apply --check "$PATCH_FILE" 2>/dev/null \
-    && git -C "$ORTOOLS_DIR" apply "$PATCH_FILE" \
-    || echo "  (patch already applied or not needed)"
+  if git -C "$ORTOOLS_DIR" apply --reverse --check "$PATCH_FILE" 2>/dev/null; then
+    echo "  already applied"
+  elif git -C "$ORTOOLS_DIR" apply "$PATCH_FILE"; then
+    echo "  applied"
+  else
+    echo "" >&2
+    echo "ERROR: $PATCH_FILE does not apply to the vendored or-tools tree." >&2
+    echo "       Its context drifts whenever or-tools is bumped. Without it," >&2
+    echo "       abseil/protobuf build SHARED and the link fails later with" >&2
+    echo "       'undefined symbol: absl::...::flags_internal::...'." >&2
+    echo "" >&2
+    echo "       To regenerate: set BUILD_SHARED_LIBS and protobuf_BUILD_SHARED_LIBS" >&2
+    echo "       to OFF in or-tools' cmake/dependencies/CMakeLists.txt, then:" >&2
+    echo "         git -C $ORTOOLS_DIR diff -U6 cmake/dependencies/CMakeLists.txt \\" >&2
+    echo "           > $PATCH_FILE" >&2
+    exit 1
+  fi
 fi
 
 for ABI in "${ABIS[@]}"; do
@@ -61,8 +82,10 @@ for ABI in "${ABIS[@]}"; do
     -DANDROID_STL=c++_static \
     -DCMAKE_BUILD_TYPE="$BUILD_TYPE"
 
+  # Keep this modest: the thin-LTO link at the end of the build holds the whole
+  # program in memory, so a high -j can push the machine into swap or OOM.
   "$CMAKE_BIN" --build "$BUILD_DIR" --target tsp_ffi --config "$BUILD_TYPE" \
-    -j16
+    -j"${BUILD_JOBS:-8}"
 
   # Strip DWARF debug info before shipping to jniLibs. The AGP strips native
   # libs on the way into the APK regardless, but keeping a fat unstripped

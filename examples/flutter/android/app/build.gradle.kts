@@ -28,6 +28,13 @@ android {
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
         versionName = flutter.versionName
+
+        // tsp_ffi ships an arm64-v8a binary only. Without this filter the build
+        // happily produces an x86_64 APK that crashes at DynamicLibrary.open,
+        // so restrict it here and fail early instead.
+        ndk {
+            abiFilters += listOf("arm64-v8a")
+        }
     }
 
     buildTypes {

@@ -22,7 +22,21 @@ final DynamicLibrary _dylib = () {
     return DynamicLibrary.open('$_libName.framework/$_libName');
   }
   if (Platform.isAndroid || Platform.isLinux) {
-    return DynamicLibrary.open('lib$_libName.so');
+    try {
+      return DynamicLibrary.open('lib$_libName.so');
+    } catch (e) {
+      // The plugin ships an arm64-v8a binary only, so the most likely cause on
+      // Android is an x86_64 emulator or an armeabi-v7a device. Say so, rather
+      // than surfacing a bare "failed to load dynamic library".
+      if (Platform.isAndroid) {
+        throw UnsupportedError(
+          'Failed to load lib$_libName.so. This plugin supports arm64-v8a only, '
+          'so it does not run on x86_64 emulators or armeabi-v7a devices. Use an '
+          'arm64 device or an arm64 system image. Original error: $e',
+        );
+      }
+      rethrow;
+    }
   }
   if (Platform.isWindows) {
     return DynamicLibrary.open('$_libName.dll');

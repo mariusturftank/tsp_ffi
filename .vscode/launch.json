@@ -1,0 +1,34 @@
+{
+    // Use IntelliSense to learn about possible attributes.
+    // Hover to view descriptions of existing attributes.
+    // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Dart & Flutter",
+            "type": "dart",
+            
+            "request": "launch",
+            "program": "${workspaceFolder}/examples/flutter/lib/main.dart"
+        },
+        {
+            "name": "Debug Native",
+            "type": "cppdbg",
+            "request": "launch",
+            "program": "/home/marius/Documents/extra/flutter/bin/cache/dart-sdk/bin/dart",
+            "args": ["${workspaceFolder}/examples/dart/bin/example.dart"],
+            "stopAtEntry": true,
+            "cwd": "${workspaceFolder}",
+            "environment": [],
+            "MIMode": "gdb",
+            "setupCommands": [
+                {
+                    "description": "Enable pretty-printing for gdb",
+                    "text": "-enable-pretty-printing",
+                    "ignoreFailures": false
+                }
+            ]
+        }
+
+    ]
+}
