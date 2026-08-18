@@ -9,10 +9,17 @@ import 'dart:async';
 import 'dart:ffi';
 import 'dart:io';
 import 'dart:isolate';
+import 'dart:math';
 
 import 'package:ffi/ffi.dart';
 
+import 'search_parameters.dart';
 import 'tsp_ffi_bindings_generated.dart';
+
+/// The solver's knobs and outcomes, which can also be imported on their own, from
+/// `package:tsp_ffi/search_parameters.dart`, by code that has to build on platforms this library
+/// does not support.
+export 'search_parameters.dart';
 
 const String _libName = 'tsp_ffi';
 
@@ -112,6 +119,61 @@ class TspSolver {
     }
   }
 
+  /// The order to visit the nodes in, as node indices.
+  ///
+  /// Solves the same problem as [solve], but hands back just the tour and takes care of the
+  /// bookkeeping around it: the closing return to [depot] is dropped, so every node appears exactly
+  /// once and [depot] comes first, and the native solution is released before returning.
+  ///
+  /// [costMatrix] is a flattened [nodeCount] x [nodeCount] matrix, where the entry at
+  /// `from * nodeCount + to` is what going from node `from` to node `to` costs.
+  ///
+  /// [timeLimit] is how long the solver may look for a better tour. It is rounded down to whole
+  /// seconds, the resolution the solver works in, and never to zero, which would let it run without
+  /// a limit at all.
+  ///
+  /// Throws [ArgumentError] if the matrix does not match [nodeCount], and [TspSolverException] if
+  /// the solver found no tour through every node.
+  static List<int> order({
+    required List<int> costMatrix,
+    required int nodeCount,
+    int depot = 0,
+    FirstSolutionStrategy strategy = FirstSolutionStrategy.automatic,
+    LocalSearchMetaheuristic metaheuristic = LocalSearchMetaheuristic.automatic,
+    Duration timeLimit = const Duration(seconds: 3),
+  }) {
+    if (nodeCount < 3) {
+      // A tour of two nodes or fewer is whatever order they are already in.
+      return List<int>.generate(nodeCount, (i) => i);
+    }
+
+    final result = solve(
+      distanceMatrix: costMatrix,
+      numNodes: nodeCount,
+      depot: depot,
+      strategy: strategy,
+      metaheuristic: metaheuristic,
+      timeLimitSeconds: max(1, timeLimit.inSeconds),
+    );
+
+    try {
+      final route = result.getRoute(0);
+      // The route is a closed tour, so it ends back at the depot it started from.
+      final order = route.isNotEmpty && route.last == depot
+          ? route.sublist(0, route.length - 1)
+          : route;
+      if (order.length != nodeCount || order.toSet().length != nodeCount) {
+        throw TspSolverException(
+          'Solver returned ${order.length} of $nodeCount nodes to visit',
+        );
+      }
+
+      return order;
+    } finally {
+      result.dispose();
+    }
+  }
+
   /// Solve TSP asynchronously on a separate isolate to avoid blocking the UI.
   ///
   /// This is useful for larger problems that might take significant time to solve.
@@ -197,15 +259,6 @@ class TspResult {
   }
 }
 
-/// Exception thrown when TSP solving fails
-class TspSolverException implements Exception {
-  final String message;
-  TspSolverException(this.message);
-
-  @override
-  String toString() => 'TspSolverException: $message';
-}
-
 /// Request for async TSP solving
 class _TspSolveRequest {
   final List<int> distanceMatrix;
@@ -225,55 +278,4 @@ class _TspSolveRequest {
     required this.metaheuristic,
     required this.timeLimitSeconds,
   });
-}
-
-enum FirstSolutionStrategy {
-  unset(0),
-  automatic(15),
-  pathCheapestArc(3),
-  pathMostConstrainedArc(4),
-  evaluatorStrategy(5),
-  savings(10),
-  parallelSavings(17),
-  sweep(11),
-  christofides(13),
-  allUnperformed(6),
-  bestInsertion(7),
-  parallelCheapestInsertion(8),
-  sequentialCheapestInsertion(14),
-  localCheapestInsertion(9),
-  localCheapestCostInsertion(16),
-  globalCheapestArc(1),
-  localCheapestArc(2),
-  firstUnboundMinValue(12);
-
-  const FirstSolutionStrategy(this.value);
-  final int value;
-}
-
-enum RoutingSearchStatus {
-  notSolved(0),
-  success(1),
-  partialSuccessLocalOptimumNotReached(2),
-  fail(3),
-  failTimeout(4),
-  invalid(5),
-  infeasible(6),
-  optimal(7);
-
-  const RoutingSearchStatus(this.value);
-  final int value;
-}
-
-/// Local search metaheuristic for improving solutions
-enum LocalSearchMetaheuristic {
-  unset(0),
-  greedyDescent(1),
-  guidedLocalSearch(2),
-  simulatedAnnealing(3),
-  tabuSearch(4),
-  automatic(6);
-
-  const LocalSearchMetaheuristic(this.value);
-  final int value;
 }

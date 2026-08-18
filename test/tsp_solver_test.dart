@@ -179,6 +179,77 @@ void main() {
     });
   });
 
+  group('TspSolver.order', () {
+    // Four corners of a square: side 10, diagonal 14, so the only optimal tour
+    // is the perimeter and the order has to step around it.
+    const square = [
+      0, 10, 14, 10, //
+      10, 0, 10, 14, //
+      14, 10, 0, 10, //
+      10, 14, 10, 0, //
+    ];
+
+    test('visits every node once, starting at the depot', () {
+      final order = TspSolver.order(
+        costMatrix: square,
+        nodeCount: 4,
+        timeLimit: const Duration(seconds: 1),
+      );
+
+      expect(order, hasLength(4));
+      expect(order.toSet(), hasLength(4));
+      expect(order.first, 0);
+    });
+
+    test('walks the square around its perimeter rather than across it', () {
+      final order = TspSolver.order(
+        costMatrix: square,
+        nodeCount: 4,
+        timeLimit: const Duration(seconds: 1),
+      );
+
+      // Closing the tour makes the last step back to the depot count too.
+      final closed = [...order, order.first];
+      expect(_routeCost(closed, square, 4), 40);
+    });
+
+    test('starts at the depot it was given', () {
+      final order = TspSolver.order(
+        costMatrix: square,
+        nodeCount: 4,
+        depot: 2,
+        timeLimit: const Duration(seconds: 1),
+      );
+
+      expect(order.first, 2);
+      expect(order.toSet(), hasLength(4));
+    });
+
+    test('keeps a time limit under a second from meaning no limit at all', () {
+      // Zero seconds lets the solver run unbounded, so anything shorter than a
+      // second has to come back as one.
+      final order = TspSolver.order(
+        costMatrix: square,
+        nodeCount: 4,
+        timeLimit: const Duration(milliseconds: 1),
+      );
+
+      expect(order, hasLength(4));
+    });
+
+    test('orders trivially small problems without asking the solver', () {
+      expect(TspSolver.order(costMatrix: [0], nodeCount: 1), [0]);
+      expect(TspSolver.order(costMatrix: [0, 5, 5, 0], nodeCount: 2), [0, 1]);
+    });
+
+    test('rejects a cost matrix that is not nodeCount x nodeCount', () {
+      expect(
+        () => TspSolver.order(costMatrix: [0, 1, 1, 0], nodeCount: 3),
+        throwsArgumentError,
+      );
+    });
+  });
+
   group('TspSolver.solveAsync', () {
     test('solves on an isolate and agrees with the synchronous result', () async {
       const matrix = [
